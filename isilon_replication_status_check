@@ -1,0 +1,55 @@
+#!/usr/bin/python
+import site
+import os
+#Below is the directory where I have all library
+site.addsitedir("/usr/local/python2.6/site-packages")
+import paramiko
+import re
+import sys
+import getpass
+import argparse
+
+usage = "usage: %prog [argss]"
+parser = argparse.ArgumentParser()
+group = parser.add_mutually_exclusive_group()
+group.add_argument("-i", "--isilon", dest="isilon_cluster", help="Isilon storage cluster name")
+args = parser.parse_args()
+#print "args: {0}".format(args)
+isilon_cluster = args.isilon_cluster
+print "isilon storage array is {0}".format(isilon_cluster)
+
+def replication(isilon_cluster):
+    SSH = paramiko.client.SSHClient()
+    SSH.set_missing_host_key_policy(paramiko.client.AutoAddPolicy())
+    print "enter the Root Password"
+    
+    SSH.connect(hostname=isilon_cluster, port=22, username="root", password=getpass.getpass())
+    stdin_, stdout_, stderr_ = SSH.exec_command("isi sync policies list")
+    stdout_.channel.recv_exit_status()
+    
+    if not stdout_:
+        print "No sync replication is configured on this Isilon box"
+    
+    else:
+	     compiled_re = re.compile(r'^.*?\n-+\n(.*?)\n-+\n.*?$', re.DOTALL)
+	    #f=open("replication_detail", "r")
+	     match = compiled_re.search(stdout_.read())
+	     if match:
+             #print "List of replication Policy"
+	          for c in match.group(1).split("\n"):
+		            policy_name=(c.split()[0])
+                    _stdin_, _stdout_, _stderr_ = SSH.exec_command("isi sync policies view --policy=" + str(policy_name))
+                    for line in _stdout_:
+                          if "Last Job State" in line:
+                                policy_state=line.split(":")[1]
+                                print (" {0}  :  {1}").format (policy_name, policy_state)
+            
+    SSH.close()         
+    
+if len(sys.argv) > 1:
+   replication(isilon_cluster)
+else:
+    print "invalid option" 
+    print "args: {0}".format(args)  
+
+
